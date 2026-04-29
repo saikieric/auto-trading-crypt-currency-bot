@@ -1,0 +1,13 @@
+.env
+storage/trades.db
+storage/state.json
+logs/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+dist/
+build/

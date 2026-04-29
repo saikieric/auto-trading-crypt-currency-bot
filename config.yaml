@@ -1,0 +1,62 @@
+bot:
+  dry_run: false
+  log_level: "DEBUG"      # DEBUG | INFO | WARNING | ERROR
+
+exchanges:
+  bitflyer:
+    enabled: true
+    trading_fee_pct: 0.15
+  gmo:
+    enabled: false
+    trading_fee_pct: 0.0
+  bitbank:
+    enabled: false
+    trading_fee_pct: -0.02  # メイカーリベート（負値 = 受け取る）
+
+risk:
+  starting_capital_jpy: 100000
+  max_trade_amount_jpy: 30000
+  max_daily_loss_jpy: 5000
+  max_open_positions: 3
+
+strategy:
+  active: "trend"
+
+  trend:
+    timeframe: "15m"
+    fast_period: 9          # 短期EMAの期間
+    slow_period: 21         # 長期EMAの期間
+    signal_confirmation_bars: 2
+    min_signal_confidence: 0.3
+
+  arbitrage:
+    min_spread_pct: 0.40    # 手数料込みで0.40%以上のスプレッドのみ
+    cooldown_seconds: 60
+    exchanges:
+      - "bitflyer"
+      - "gmo"
+      - "bitbank"
+
+data:
+  ohlcv_poll_interval_seconds: 60
+  ticker_refresh_interval_seconds: 2
+  ohlcv_history_candles: 50
+
+notifications:
+  # discord_webhook_url は .env の DISCORD_WEBHOOK_URL から自動注入
+  heartbeat_interval_hours: 6
+  notify_on:
+    - "trade_open"
+    - "trade_close"
+    - "risk_rejected"
+    - "daily_summary"
+    - "error"
+    - "bot_start"
+    - "bot_stop"
+
+storage:
+  db_path: "storage/trades.db"
+  state_path: "storage/state.json"
+  log_path: "logs/bot.log"
+  log_rotation: "100 MB"
+  log_retention: "30 days"
