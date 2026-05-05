@@ -63,8 +63,10 @@ class OrderRouter:
                     logger.warning(f"Failed to refresh balance before sell: {e}")
                     available_btc = self._portfolio.get_available_btc(exchange)
 
-                if available_btc <= 0:
-                    logger.warning(f"No BTC to sell on {exchange}, skipping")
+                # bitFlyer最小注文サイズ: 0.001 BTC
+                min_btc = 0.001
+                if available_btc < min_btc:
+                    logger.warning(f"BTC balance too small to sell: {available_btc:.8f} BTC (min {min_btc} BTC)")
                     return
                 # 手数料分（0.15%）をBTCで差し引いてから売る
                 fee_rate = 0.0015
