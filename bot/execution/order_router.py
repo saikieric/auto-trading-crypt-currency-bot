@@ -66,7 +66,9 @@ class OrderRouter:
                 if available_btc <= 0:
                     logger.warning(f"No BTC to sell on {exchange}, skipping")
                     return
-                amount_btc = round(available_btc, 8)
+                # 手数料分（0.15%）をBTCで差し引いてから売る
+                fee_rate = 0.0015
+                amount_btc = round(available_btc * (1 - fee_rate), 8)
 
             result = await adapter.place_market_order(order.side, amount_btc)
             await self._tracker.register(result, strategy=order.signal.strategy)
