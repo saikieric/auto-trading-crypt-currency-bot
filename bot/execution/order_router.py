@@ -48,10 +48,21 @@ class OrderRouter:
             return
 
         try:
-            # 売りの場合は保有BTC量を使う（計算値ではなく実際の残高）
+            # 売りの場合は直前にリアルタイム残高を取得して使う
             amount_btc = order.amount_btc
             if order.side == "sell":
-                available_btc = self._portfolio.get_available_btc(exchange)
+                try:
+                    balances = await adapter.fetch_balance()
+                    available_btc = balances.get("BTC", 0.0)
+                    self._portfolio.set_balance(
+                        exchange,
+                        jpy=balances.get("JPY", 0.0),
+                        btc=available_btc,
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to refresh balance before sell: {e}")
+                    available_btc = self._portfolio.get_available_btc(exchange)
+
                 if available_btc <= 0:
                     logger.warning(f"No BTC to sell on {exchange}, skipping")
                     return
