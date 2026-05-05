@@ -323,17 +323,15 @@ class DiscordCommandBot:
             "Content-Type": "application/json",
             "User-Agent": "DiscordBot (trading-bot, 1.0)",
         }
-        connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
         try:
-            async with aiohttp.ClientSession(connector=connector) as session:
-                async with session.post(
-                    url,
-                    json={"content": content},
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as resp:
-                    if resp.status not in (200, 201):
-                        body = await resp.text()
-                        logger.warning(f"Discord message send failed {resp.status}: {body}")
+            async with self._session.post(
+                url,
+                json={"content": content},
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status not in (200, 201):
+                    body = await resp.text()
+                    logger.warning(f"Discord message send failed {resp.status}: {body}")
         except Exception as e:
             logger.warning(f"Discord send_message error: {e}")
