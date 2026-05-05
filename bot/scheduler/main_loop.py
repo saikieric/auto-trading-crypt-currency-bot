@@ -171,7 +171,9 @@ class BotMainLoop:
                         await self._ohlcv_store.save(exchange, pair, trend_cfg.timeframe, candles)
                         signals = await self._composer.on_ohlcv_update(exchange, candles)
                         for signal in signals:
-                            approved = await self._risk.approve(signal)
+                            ticker = self._aggregator.get_ticker(exchange)
+                            price = ticker.ask if ticker and ticker.ask > 0 else 0.0
+                            approved = await self._risk.approve(signal, current_btc_price=price)
                             if isinstance(approved, ApprovedOrder):
                                 await self._router.execute(approved)
                     except Exception as e:
