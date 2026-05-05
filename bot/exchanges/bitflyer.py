@@ -109,12 +109,14 @@ class BitflyerAdapter(ExchangeAdapter):
         }
 
     async def place_market_order(self, side: str, amount_btc: float) -> OrderResult:
+        amount_btc = round(amount_btc, 8)  # bitFlyer最小単位: 0.00000001 BTC
         raw = await _run(lambda: self._exchange.create_order(
             "BTC/JPY", "market", side, amount_btc
         ))
         return self._parse_order(raw)
 
     async def place_limit_order(self, side: str, amount_btc: float, price: float) -> OrderResult:
+        amount_btc = round(amount_btc, 8)
         raw = await _run(lambda: self._exchange.create_order(
             "BTC/JPY", "limit", side, amount_btc, price
         ))
