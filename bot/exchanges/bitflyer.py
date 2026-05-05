@@ -172,19 +172,31 @@ class BitflyerAdapter(ExchangeAdapter):
         pass
 
     def _parse_order(self, raw: dict) -> OrderResult:
+        # ccxtがbitFlyer生APIのフィールドを変換した結果を使う
+        # 生API: executed_size→filled, average_price→average, child_order_state→status
+        # create_orderはIDのみ返すためほぼ全フィールドがNoneになりうる
         fee = 0.0
         if raw.get("fee"):
-            fee = raw["fee"].get("cost", 0.0)
+            fee = float(raw["fee"].get("cost") or 0.0)
+
+        side = (raw.get("side") or "buy").lower()
+        pair = raw.get("symbol") or "BTC/JPY"
+        amount_btc = float(raw.get("filled") or raw.get("amount") or 0.0)
+        price = float(raw.get("average") or raw.get("price") or 0.0)
+        status = self._map_status(raw.get("status") or "") or "open"
+        order_id = str(raw.get("id") or raw.get("child_order_acceptance_id") or "")
+        timestamp = float(raw.get("timestamp") or time.time() * 1000)
+
         return OrderResult(
             exchange=self.name,
-            order_id=str(raw.get("id", "")),
-            side=raw.get("side") or "buy",
-            pair=raw.get("symbol") or "BTC/JPY",
-            amount_btc=raw.get("filled") or raw.get("amount") or 0.0,
-            price=raw.get("average") or raw.get("price") or 0.0,
+            order_id=order_id,
+            side=side,
+            pair=pair,
+            amount_btc=amount_btc,
+            price=price,
             fee_jpy=fee,
-            status=self._map_status(raw.get("status", "")) or "open",
-            timestamp=raw.get("timestamp") or time.time() * 1000,
+            status=status,
+            timestamp=timestamp,
             raw=raw,
         )
 
