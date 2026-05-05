@@ -51,11 +51,18 @@ class BotMainLoop:
         self._portfolio = Portfolio(config.risk.starting_capital_jpy)
 
         # --- Risk manager ---
+        # bitFlyer（唯一有効な取引所）の手数料を取得
+        ex_configs = config.exchanges
+        active_fee = next(
+            (c.trading_fee_pct for c in ex_configs.values() if c.enabled),
+            0.0,
+        )
         self._risk = RiskManager(
             config=config.risk,
             portfolio=self._portfolio,
             state_path=config.storage.state_path,
             dry_run=config.bot.dry_run,
+            fee_pct=active_fee,
         )
 
         # --- Order tracking ---

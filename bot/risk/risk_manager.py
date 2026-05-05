@@ -43,11 +43,13 @@ class RiskManager:
         portfolio: Portfolio,
         state_path: str = "storage/state.json",
         dry_run: bool = True,
+        fee_pct: float = 0.0,
     ) -> None:
         self._config = config
         self._portfolio = portfolio
         self._state_path = Path(state_path)
         self._dry_run = dry_run
+        self._fee_pct = fee_pct  # 片道手数料（例: 0.15）
         self._load_state()
 
     def _load_state(self) -> None:
@@ -92,8 +94,13 @@ class RiskManager:
             logger.warning(f"RISK REJECT: {reason}")
             return RejectedOrder(signal=signal, reason=reason)
 
-        # 4. Clamp trade size
+        # 4. Clamp trade size（手数料分を差し引いた実効額で計算）
         amount_jpy = min(signal.suggested_amount_jpy, self._config.max_trade_amount_jpy)
+        fee_jpy = amount_jpy * (self._fee_pct / 100)
+        net_amount_jpy = amount_jpy - fee_jpy
+        logger.debug(
+            f"Trade amount: ¥{amount_jpy:,.0f} fee({self._fee_pct}%): ¥{fee_jpy:,.0f} net: ¥{net_amount_jpy:,.0f}"
+        )
 
         if current_btc_price <= 0:
             # Estimate from signal metadata

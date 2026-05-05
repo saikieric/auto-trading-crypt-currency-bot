@@ -133,6 +133,7 @@ class OrderRouter:
         import time
 
         price = order.amount_jpy / order.amount_btc if order.amount_btc > 0 else 0.0
+        fee_jpy = order.amount_jpy * (order.signal.metadata.get("fee_pct", 0.0) / 100)
 
         result = OrderResult(
             exchange=order.buy_exchange or order.sell_exchange,
@@ -141,7 +142,7 @@ class OrderRouter:
             pair=order.pair,
             amount_btc=order.amount_btc,
             price=price,
-            fee_jpy=0.0,
+            fee_jpy=fee_jpy,
             status="filled",
             timestamp=time.time() * 1000,
         )
