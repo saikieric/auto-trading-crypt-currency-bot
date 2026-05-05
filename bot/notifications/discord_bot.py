@@ -129,6 +129,13 @@ class DiscordCommandBot:
                     elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
                         break
         finally:
+            # heartbeatを先に止めてからsessionを閉じる（競合防止）
+            if self._heartbeat_task and not self._heartbeat_task.done():
+                self._heartbeat_task.cancel()
+                try:
+                    await self._heartbeat_task
+                except asyncio.CancelledError:
+                    pass
             await self._session.close()
 
     async def _handle_event(self, payload: dict) -> None:
@@ -332,6 +339,8 @@ class DiscordCommandBot:
     # ------------------------------------------------------------------ #
 
     async def _send_message(self, channel_id: str, content: str) -> None:
+        if not self._session or self._session.closed:
+            return
         url = f"{_API}/channels/{channel_id}/messages"
         headers = {
             "Authorization": f"Bot {self._token}",

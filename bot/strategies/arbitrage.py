@@ -71,7 +71,8 @@ class ArbitrageStrategy(Strategy):
             return None
 
         final_amount_jpy = amount_btc * buy_ticker.ask
-        confidence = min((spread_pct - self._config.min_spread_pct) / self._config.min_spread_pct, 1.0)
+        min_spread = self._config.min_spread_pct
+        confidence = min((spread_pct - min_spread) / min_spread, 1.0) if min_spread > 0 else 1.0
 
         reason = (
             f"Arb spread {spread_pct:.3f}%: buy on {buy_exchange} "

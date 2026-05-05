@@ -32,7 +32,8 @@ _SELECT = """
 SELECT timestamp, open, high, low, close, volume
 FROM ohlcv_cache
 WHERE exchange=? AND pair=? AND timeframe=?
-ORDER BY timestamp ASC
+ORDER BY timestamp DESC
+LIMIT ?
 """
 
 # 保持する最大本数（DB肥大化防止）
@@ -82,10 +83,10 @@ class OhlcvStore:
         self, exchange: str, pair: str, timeframe: str, limit: int
     ) -> list[OHLCV]:
         async with aiosqlite.connect(self._db_path) as db:
-            cursor = await db.execute(_SELECT, (exchange, pair, timeframe))
+            cursor = await db.execute(_SELECT, (exchange, pair, timeframe, limit))
             rows = await cursor.fetchall()
 
-        rows = rows[-limit:]
+        rows = list(reversed(rows))  # DESC取得を時系列順に戻す
         return [
             OHLCV(
                 timestamp=row[0],

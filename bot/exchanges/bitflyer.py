@@ -98,8 +98,7 @@ class BitflyerAdapter(ExchangeAdapter):
                 open=0, high=0, low=0, close=0, volume=0,
             )]
         except Exception as e:
-            # エラー時は例外をそのまま raise して _ohlcv_poller で catch させる
-            raise RuntimeError(f"Failed to fetch OHLCV from trades: {e}")
+            raise RuntimeError(f"Failed to fetch OHLCV from trades: {e}") from e
 
     async def fetch_balance(self) -> dict[str, float]:
         raw = await _run(lambda: self._exchange.fetch_balance())
