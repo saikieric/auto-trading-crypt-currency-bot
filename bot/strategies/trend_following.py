@@ -7,6 +7,7 @@ from bot.config.schema import TrendConfig
 from bot.data.market_data import Ticker, OHLCV
 from bot.exchanges.aggregator import ExchangeAggregator
 from bot.indicators.moving_averages import detect_crossover
+from loguru import logger
 from bot.strategies.base import Strategy, TradeSignal, SignalType
 
 
@@ -23,6 +24,7 @@ class TrendFollowingStrategy(Strategy):
         self._aggregator = aggregator
         self._max_amount = max_trade_amount_jpy
         self._candles: deque[OHLCV] = deque(maxlen=200)
+        self._last_signal_candle_ts: float = 0.0  # 同じローソク足で重複シグナルを防ぐ
 
     async def on_ticker_update(self, tickers: Dict[str, Ticker]) -> Optional[TradeSignal]:
         return None  # trend strategy uses OHLCV, not real-time ticks
@@ -37,6 +39,11 @@ class TrendFollowingStrategy(Strategy):
         if len(closes) < self._config.slow_period + self._config.signal_confirmation_bars:
             return None
 
+        # 直近の確定済みローソク足のタイムスタンプ（最新足は未確定のため1本前を使う）
+        last_closed_ts = self._candles[-2].timestamp if len(self._candles) >= 2 else 0.0
+        if last_closed_ts <= self._last_signal_candle_ts:
+            return None  # このローソク足では既にシグナルを出した
+
         cross = detect_crossover(
             closes,
             closes,
@@ -44,6 +51,15 @@ class TrendFollowingStrategy(Strategy):
             self._config.slow_period,
             self._config.signal_confirmation_bars,
         )
+        from bot.indicators.moving_averages import ema as _ema
+        _fast = _ema(closes, self._config.fast_period) or 0.0
+        _slow = _ema(closes, self._config.slow_period) or 0.0
+        _gap = abs(_fast - _slow) / _slow * 100 if _slow else 0.0
+        logger.debug(
+            f"[trend] candles={len(closes)} cross={cross} "
+            f"fast={_fast:.0f} slow={_slow:.0f} gap={_gap:.3f}%"
+        )
+
         if cross is None:
             return None
 
@@ -72,6 +88,8 @@ class TrendFollowingStrategy(Strategy):
             f"{cross.capitalize()} cross: fast_EMA({self._config.fast_period})={fast_val:.0f} "
             f"slow_EMA({self._config.slow_period})={slow_val:.0f}"
         )
+
+        self._last_signal_candle_ts = last_closed_ts
 
         return TradeSignal(
             strategy=self.name,

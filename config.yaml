@@ -27,7 +27,7 @@ strategy:
     fast_period: 9          # 短期EMAの期間
     slow_period: 21         # 長期EMAの期間
     signal_confirmation_bars: 2
-    min_signal_confidence: 0.3
+    min_signal_confidence: 0.01
 
   arbitrage:
     min_spread_pct: 0.40    # 手数料込みで0.40%以上のスプレッドのみ
