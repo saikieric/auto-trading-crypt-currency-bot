@@ -70,6 +70,7 @@ class DiscordCommandBot:
         self._heartbeat_interval: float = 41.25
         self._sequence: Optional[int] = None
         self._running = False
+        self._heartbeat_task: Optional[asyncio.Task] = None
 
     # ------------------------------------------------------------------ #
     # Public                                                               #
@@ -81,15 +82,20 @@ class DiscordCommandBot:
             return
 
         self._running = True
+        backoff = 10
         while self._running:
             try:
                 await self._connect()
+                backoff = 10  # 正常接続できたらリセット
             except Exception as e:
-                logger.warning(f"Discord command bot disconnected: {e}. Reconnecting in 10s...")
-                await asyncio.sleep(10)
+                logger.warning(f"Discord command bot disconnected: {e}. Reconnecting in {backoff}s...")
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 300)  # 最大5分まで指数バックオフ
 
     async def stop(self) -> None:
         self._running = False
+        if self._heartbeat_task:
+            self._heartbeat_task.cancel()
         if self._ws:
             await self._ws.close()
         if self._session:
@@ -104,20 +110,26 @@ class DiscordCommandBot:
             "Authorization": f"Bot {self._token}",
             "User-Agent": "DiscordBot (trading-bot, 1.0)",
         }
+        # 前のセッションを確実に閉じる
+        if self._session and not self._session.closed:
+            await self._session.close()
+
         connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
         self._session = aiohttp.ClientSession(headers=_headers, connector=connector)
-        # Get gateway URL
-        async with self._session.get(f"{_API}/gateway") as resp:
-            data = await resp.json()
-        gateway_url = data["url"] + "?v=10&encoding=json"
+        try:
+            async with self._session.get(f"{_API}/gateway") as resp:
+                data = await resp.json()
+            gateway_url = data["url"] + "?v=10&encoding=json"
 
-        async with self._session.ws_connect(gateway_url) as ws:
-            self._ws = ws
-            async for msg in ws:
-                if msg.type == aiohttp.WSMsgType.TEXT:
-                    await self._handle_event(json.loads(msg.data))
-                elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
-                    break
+            async with self._session.ws_connect(gateway_url) as ws:
+                self._ws = ws
+                async for msg in ws:
+                    if msg.type == aiohttp.WSMsgType.TEXT:
+                        await self._handle_event(json.loads(msg.data))
+                    elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
+                        break
+        finally:
+            await self._session.close()
 
     async def _handle_event(self, payload: dict) -> None:
         op = payload.get("op")
@@ -126,7 +138,10 @@ class DiscordCommandBot:
 
         if op == 10:  # Hello
             self._heartbeat_interval = data["heartbeat_interval"] / 1000
-            asyncio.create_task(self._heartbeat_loop())
+            # 前のハートビートタスクをキャンセルしてから新規作成
+            if self._heartbeat_task and not self._heartbeat_task.done():
+                self._heartbeat_task.cancel()
+            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
             await self._identify()
 
         elif op == 0:  # Dispatch
