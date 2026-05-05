@@ -113,10 +113,17 @@ class BitflyerAdapter(ExchangeAdapter):
         raw = await _run(lambda: self._exchange.create_order(
             "BTC/JPY", "market", side, amount_btc
         ))
-        # bitFlyerはcreate_order後すぐにsideを返さないことがある
-        if not raw.get("side"):
+        order_id = str(raw.get("id", ""))
+        # bitFlyerのcreate_orderはIDしか返さないため約定情報をfetchで取得
+        await asyncio.sleep(1.0)
+        try:
+            result = await self.fetch_order_status(order_id)
+            result.side = result.side or side
+            result.pair = result.pair or "BTC/JPY"
+            return result
+        except Exception:
             raw["side"] = side
-        return self._parse_order(raw)
+            return self._parse_order(raw)
 
     async def place_limit_order(self, side: str, amount_btc: float, price: float) -> OrderResult:
         amount_btc = round(amount_btc, 8)
@@ -176,7 +183,7 @@ class BitflyerAdapter(ExchangeAdapter):
             amount_btc=raw.get("filled") or raw.get("amount") or 0.0,
             price=raw.get("average") or raw.get("price") or 0.0,
             fee_jpy=fee,
-            status=self._map_status(raw.get("status", "")),
+            status=self._map_status(raw.get("status", "")) or "open",
             timestamp=raw.get("timestamp") or time.time() * 1000,
             raw=raw,
         )
