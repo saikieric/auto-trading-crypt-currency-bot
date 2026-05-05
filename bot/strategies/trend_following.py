@@ -24,7 +24,7 @@ class TrendFollowingStrategy(Strategy):
         self._aggregator = aggregator
         self._max_amount = max_trade_amount_jpy
         self._candles: deque[OHLCV] = deque(maxlen=200)
-        self._last_signal_candle_ts: float = 0.0  # 同じローソク足で重複シグナルを防ぐ
+        self._last_cross: Optional[str] = None  # 同じクロス方向の重複シグナルを防ぐ
 
     async def on_ticker_update(self, tickers: Dict[str, Ticker]) -> Optional[TradeSignal]:
         return None  # trend strategy uses OHLCV, not real-time ticks
@@ -38,11 +38,6 @@ class TrendFollowingStrategy(Strategy):
         closes = [c.close for c in self._candles]
         if len(closes) < self._config.slow_period + self._config.signal_confirmation_bars:
             return None
-
-        # 直近の確定済みローソク足のタイムスタンプ（最新足は未確定のため1本前を使う）
-        last_closed_ts = self._candles[-2].timestamp if len(self._candles) >= 2 else 0.0
-        if last_closed_ts <= self._last_signal_candle_ts:
-            return None  # このローソク足では既にシグナルを出した
 
         cross = detect_crossover(
             closes,
@@ -61,6 +56,11 @@ class TrendFollowingStrategy(Strategy):
         )
 
         if cross is None:
+            self._last_cross = None  # クロスなしでリセット（次のクロスを検出可能にする）
+            return None
+
+        # 同じ方向のクロスが連続したら無視
+        if cross == self._last_cross:
             return None
 
         signal_type = SignalType.BUY if cross == "golden" else SignalType.SELL
@@ -89,7 +89,7 @@ class TrendFollowingStrategy(Strategy):
             f"slow_EMA({self._config.slow_period})={slow_val:.0f}"
         )
 
-        self._last_signal_candle_ts = last_closed_ts
+        self._last_cross = cross
 
         return TradeSignal(
             strategy=self.name,
