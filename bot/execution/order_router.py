@@ -48,9 +48,27 @@ class OrderRouter:
             return
 
         try:
-            result = await adapter.place_market_order(order.side, order.amount_btc)
+            # 売りの場合は保有BTC量を使う（計算値ではなく実際の残高）
+            amount_btc = order.amount_btc
+            if order.side == "sell":
+                available_btc = self._portfolio.get_available_btc(exchange)
+                if available_btc <= 0:
+                    logger.warning(f"No BTC to sell on {exchange}, skipping")
+                    return
+                amount_btc = round(available_btc, 8)
+
+            result = await adapter.place_market_order(order.side, amount_btc)
             await self._tracker.register(result, strategy=order.signal.strategy)
             await self._portfolio.update_from_order(result)
+
+            if order.side == "buy" and result.status == "filled":
+                self._portfolio.add_open_position(result)
+            elif order.side == "sell":
+                # 買いポジションを全てクリア
+                for pos in list(self._portfolio._open_positions):
+                    if pos.exchange == exchange:
+                        self._portfolio.remove_open_position(pos.order_id)
+
             await self._notifier.send_trade_notification(result, order.signal)
             logger.info(
                 f"Order executed: {exchange} {order.side} "
