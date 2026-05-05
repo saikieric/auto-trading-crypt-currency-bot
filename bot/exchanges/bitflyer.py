@@ -170,11 +170,11 @@ class BitflyerAdapter(ExchangeAdapter):
             fee = raw["fee"].get("cost", 0.0)
         return OrderResult(
             exchange=self.name,
-            order_id=str(raw["id"]),
-            side=raw["side"],
-            pair=raw.get("symbol", "BTC/JPY"),
-            amount_btc=raw.get("filled", 0.0) or raw.get("amount", 0.0),
-            price=raw.get("average", 0.0) or raw.get("price", 0.0),
+            order_id=str(raw.get("id", "")),
+            side=raw.get("side") or "buy",
+            pair=raw.get("symbol") or "BTC/JPY",
+            amount_btc=raw.get("filled") or raw.get("amount") or 0.0,
+            price=raw.get("average") or raw.get("price") or 0.0,
             fee_jpy=fee,
             status=self._map_status(raw.get("status", "")),
             timestamp=raw.get("timestamp") or time.time() * 1000,
