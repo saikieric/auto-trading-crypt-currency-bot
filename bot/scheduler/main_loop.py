@@ -8,7 +8,7 @@ from loguru import logger
 
 from bot.config.schema import Config
 from bot.data.feed_manager import FeedManager
-from bot.data.market_data import Ticker
+from bot.data.market_data import Ticker, OrderResult
 from bot.data.ohlcv_store import OhlcvStore
 from bot.exchanges.aggregator import ExchangeAggregator
 from bot.exchanges.bitbank import BitbankAdapter
@@ -230,12 +230,26 @@ class BotMainLoop:
         for exchange, adapter in self._adapters.items():
             try:
                 balances = await adapter.fetch_balance()
-                self._portfolio.set_balance(
-                    exchange,
-                    jpy=balances.get("JPY", 0.0),
-                    btc=balances.get("BTC", 0.0),
-                )
+                jpy = balances.get("JPY", 0.0)
+                btc = balances.get("BTC", 0.0)
+                self._portfolio.set_balance(exchange, jpy=jpy, btc=btc)
                 logger.info(f"Initial balance {exchange}: {balances}")
+
+                # BTC保有量からオープンポジションを復元（再起動後も制限が効くように）
+                if btc > 0.00001:
+                    dummy = OrderResult(
+                        exchange=exchange,
+                        order_id=f"RESTORED_{exchange}",
+                        side="buy",
+                        pair="BTC/JPY",
+                        amount_btc=btc,
+                        price=0.0,
+                        fee_jpy=0.0,
+                        status="filled",
+                        timestamp=0.0,
+                    )
+                    self._portfolio.add_open_position(dummy)
+                    logger.info(f"Restored open position from balance: {btc:.6f} BTC on {exchange}")
             except Exception as e:
                 logger.warning(f"Could not fetch initial balance for {exchange}: {e}")
 
