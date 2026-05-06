@@ -57,6 +57,7 @@ class ArbitrageConfig(BaseModel):
 class StrategyConfig(BaseModel):
     active: Literal["trend", "arbitrage", "both"] = "both"
     trend: TrendConfig = Field(default_factory=TrendConfig)
+    sol_trend: TrendConfig = Field(default_factory=TrendConfig)
     arbitrage: ArbitrageConfig = Field(default_factory=ArbitrageConfig)
 
 

@@ -129,7 +129,7 @@ class GmoAdapter(ExchangeAdapter):
                 result["BTC"] = available
         return result
 
-    async def place_market_order(self, side: str, amount_btc: float) -> OrderResult:
+    async def place_market_order(self, side: str, amount_btc: float, pair: str = "BTC/JPY") -> OrderResult:
         body = {
             "symbol": "BTC_JPY",
             "side": side.upper(),
@@ -141,7 +141,7 @@ class GmoAdapter(ExchangeAdapter):
         await asyncio.sleep(0.5)
         return await self.fetch_order_status(order_id)
 
-    async def place_limit_order(self, side: str, amount_btc: float, price: float) -> OrderResult:
+    async def place_limit_order(self, side: str, amount_btc: float, price: float, pair: str = "BTC/JPY") -> OrderResult:
         body = {
             "symbol": "BTC_JPY",
             "side": side.upper(),

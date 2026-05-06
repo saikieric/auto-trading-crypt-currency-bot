@@ -10,8 +10,8 @@ exchanges:
     enabled: false
     trading_fee_pct: 0.0
   bitbank:
-    enabled: false
-    trading_fee_pct: -0.02  # メイカーリベート（負値 = 受け取る）
+    enabled: true
+    trading_fee_pct: 0.12   # テイカー手数料
 
 risk:
   starting_capital_jpy: 100000
@@ -20,21 +20,27 @@ risk:
   max_open_positions: 3
 
 strategy:
-  active: "trend"
+  active: "both"
 
-  trend:
+  trend:                    # bitFlyer BTC/JPY EMAクロス
     timeframe: "15m"
-    fast_period: 9          # 短期EMAの期間
-    slow_period: 21         # 長期EMAの期間
+    fast_period: 9
+    slow_period: 21
     signal_confirmation_bars: 2
     min_signal_confidence: 0.0
 
-  arbitrage:
-    min_spread_pct: 0.40    # 手数料込みで0.40%以上のスプレッドのみ
-    cooldown_seconds: 60
+  sol_trend:                # Bitbank SOL/JPY EMAクロス
+    timeframe: "15m"
+    fast_period: 9
+    slow_period: 21
+    signal_confirmation_bars: 2
+    min_signal_confidence: 0.0
+
+  arbitrage:                # bitFlyer ↔ Bitbank BTC/JPY アービトラージ
+    min_spread_pct: 0.30    # bitFlyer 0.15% + Bitbank 0.12% = 0.27% なので0.30%以上
+    cooldown_seconds: 120
     exchanges:
       - "bitflyer"
-      - "gmo"
       - "bitbank"
 
 data:

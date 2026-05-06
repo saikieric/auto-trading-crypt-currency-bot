@@ -50,38 +50,46 @@ class OrderRouter:
         try:
             # 売りの場合は直前にリアルタイム残高を取得して使う
             amount_btc = order.amount_btc
+            pair = order.pair or "BTC/JPY"
+
+            # ベース通貨を判定（BTC/JPY→BTC、SOL/JPY→SOL）
+            base_currency = pair.split("/")[0] if "/" in pair else "BTC"
+
             if order.side == "sell":
                 try:
                     balances = await adapter.fetch_balance()
-                    available_btc = balances.get("BTC", 0.0)
+                    available_base = balances.get(base_currency, 0.0)
                     self._portfolio.set_balance(
                         exchange,
                         jpy=balances.get("JPY", 0.0),
-                        btc=available_btc,
+                        btc=balances.get("BTC", 0.0),
                     )
                 except Exception as e:
                     logger.warning(f"Failed to refresh balance before sell: {e}")
-                    available_btc = self._portfolio.get_available_btc(exchange)
+                    available_base = self._portfolio.get_available_btc(exchange)
 
-                # bitFlyer最小注文サイズ: 0.001 BTC
-                min_btc = 0.001
-                if available_btc < min_btc:
-                    logger.warning(f"BTC balance too small to sell: {available_btc:.8f} BTC (min {min_btc} BTC)")
+                # 最小注文サイズチェック（BTC: 0.001、SOL: 0.01）
+                min_amount = 0.001 if base_currency == "BTC" else 0.01
+                if available_base < min_amount:
+                    logger.warning(
+                        f"{base_currency} balance too small to sell: "
+                        f"{available_base:.8f} (min {min_amount})"
+                    )
                     return
-                # 手数料分（0.15%）をBTCで差し引いてから売る
+                # 手数料分（概ね0.12〜0.15%）をベース通貨で差し引いてから売る
                 fee_rate = 0.0015
-                amount_btc = round(available_btc * (1 - fee_rate), 8)
+                amount_btc = round(available_base * (1 - fee_rate), 8)
 
-            result = await adapter.place_market_order(order.side, amount_btc)
+            result = await adapter.place_market_order(order.side, amount_btc, pair=pair)
             await self._tracker.register(result, strategy=order.signal.strategy)
             await self._portfolio.update_from_order(result)
 
             if order.side == "buy" and result.status == "filled":
                 self._portfolio.add_open_position(result)
             elif order.side == "sell":
-                # 買いポジションを全てクリア
+                # 同じ取引所・ペアの買いポジションをクリア
                 for pos in list(self._portfolio._open_positions):
-                    if pos.exchange == exchange:
+                    if pos.exchange == exchange and pos.pair == pair:
                         self._portfolio.remove_open_position(pos.order_id)
 
             await self._notifier.send_trade_notification(result, order.signal)

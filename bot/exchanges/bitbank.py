@@ -51,29 +51,34 @@ class BitbankAdapter(ExchangeAdapter):
         return {
             "JPY": raw.get("JPY", {}).get("free", 0.0),
             "BTC": raw.get("BTC", {}).get("free", 0.0),
+            "SOL": raw.get("SOL", {}).get("free", 0.0),
         }
 
-    async def place_market_order(self, side: str, amount_btc: float) -> OrderResult:
+    async def place_market_order(
+        self, side: str, amount_btc: float, pair: str = "BTC/JPY"
+    ) -> OrderResult:
         raw = await _run(lambda: self._exchange.create_order(
-            "BTC/JPY", "market", side, amount_btc
+            pair, "market", side, amount_btc
         ))
         return self._parse_order(raw)
 
-    async def place_limit_order(self, side: str, amount_btc: float, price: float) -> OrderResult:
+    async def place_limit_order(
+        self, side: str, amount_btc: float, price: float, pair: str = "BTC/JPY"
+    ) -> OrderResult:
         raw = await _run(lambda: self._exchange.create_order(
-            "BTC/JPY", "limit", side, amount_btc, price
+            pair, "limit", side, amount_btc, price
         ))
         return self._parse_order(raw)
 
-    async def cancel_order(self, order_id: str) -> bool:
+    async def cancel_order(self, order_id: str, pair: str = "BTC/JPY") -> bool:
         try:
-            await _run(lambda: self._exchange.cancel_order(order_id, "BTC/JPY"))
+            await _run(lambda: self._exchange.cancel_order(order_id, pair))
             return True
         except Exception:
             return False
 
-    async def fetch_order_status(self, order_id: str) -> OrderResult:
-        raw = await _run(lambda: self._exchange.fetch_order(order_id, "BTC/JPY"))
+    async def fetch_order_status(self, order_id: str, pair: str = "BTC/JPY") -> OrderResult:
+        raw = await _run(lambda: self._exchange.fetch_order(order_id, pair))
         return self._parse_order(raw)
 
     async def subscribe_ticker(

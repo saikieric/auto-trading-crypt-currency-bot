@@ -19,10 +19,16 @@ class TrendFollowingStrategy(Strategy):
         config: TrendConfig,
         aggregator: ExchangeAggregator,
         max_trade_amount_jpy: float,
+        pair: str = "BTC/JPY",
+        exchange_filter: Optional[str] = None,
+        strategy_name: str = "trend",
     ) -> None:
         self._config = config
         self._aggregator = aggregator
         self._max_amount = max_trade_amount_jpy
+        self._pair = pair
+        self._exchange_filter = exchange_filter  # None = all exchanges
+        self.name = strategy_name
         self._candles: deque[OHLCV] = deque(maxlen=200)
         self._last_cross: Optional[str] = None  # 同じクロス方向の重複シグナルを防ぐ
 
@@ -32,6 +38,9 @@ class TrendFollowingStrategy(Strategy):
     async def on_ohlcv_update(
         self, exchange: str, candles: list[OHLCV]
     ) -> Optional[TradeSignal]:
+        # このストラテジーが対象とする取引所のみ処理
+        if self._exchange_filter and exchange != self._exchange_filter:
+            return None
         for c in candles:
             self._candles.append(c)
 
@@ -51,8 +60,8 @@ class TrendFollowingStrategy(Strategy):
         _slow = _ema(closes, self._config.slow_period) or 0.0
         _gap = abs(_fast - _slow) / _slow * 100 if _slow else 0.0
         logger.debug(
-            f"[trend] candles={len(closes)} cross={cross} "
-            f"fast={_fast:.0f} slow={_slow:.0f} gap={_gap:.3f}%"
+            f"[{self.name}/{self._pair}] candles={len(closes)} cross={cross} "
+            f"fast={_fast:.2f} slow={_slow:.2f} gap={_gap:.3f}%"
         )
 
         if cross is None:
@@ -66,10 +75,15 @@ class TrendFollowingStrategy(Strategy):
         signal_type = SignalType.BUY if cross == "golden" else SignalType.SELL
 
         # Pick the exchange with the tightest ask for buys, tightest bid for sells
-        if signal_type == SignalType.BUY:
-            best_ex, best_price = self._aggregator.get_best_ask()
+        if self._exchange_filter:
+            # 特定取引所に固定
+            best_ex = self._exchange_filter
+            ticker = self._aggregator.get_ticker(best_ex)
+            best_price = (ticker.ask if signal_type == SignalType.BUY else ticker.bid) if ticker else 0.0
+        elif signal_type == SignalType.BUY:
+            best_ex, best_price = self._aggregator.get_best_ask(pair=self._pair)
         else:
-            best_ex, best_price = self._aggregator.get_best_bid()
+            best_ex, best_price = self._aggregator.get_best_bid(pair=self._pair)
 
         if not best_ex or best_price == 0:
             return None
@@ -94,7 +108,7 @@ class TrendFollowingStrategy(Strategy):
         return TradeSignal(
             strategy=self.name,
             signal=signal_type,
-            pair="BTC/JPY",
+            pair=self._pair,
             buy_exchange=best_ex if signal_type == SignalType.BUY else "",
             sell_exchange=best_ex if signal_type == SignalType.SELL else "",
             suggested_amount_jpy=self._max_amount,

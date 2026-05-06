@@ -107,10 +107,10 @@ class BitflyerAdapter(ExchangeAdapter):
             "BTC": raw.get("BTC", {}).get("free", 0.0),
         }
 
-    async def place_market_order(self, side: str, amount_btc: float) -> OrderResult:
+    async def place_market_order(self, side: str, amount_btc: float, pair: str = "BTC/JPY") -> OrderResult:
         amount_btc = round(amount_btc, 8)  # bitFlyer最小単位: 0.00000001 BTC
         raw = await _run(lambda: self._exchange.create_order(
-            "BTC/JPY", "market", side, amount_btc
+            pair, "market", side, amount_btc
         ))
         order_id = str(raw.get("id", ""))
         # bitFlyerのcreate_orderはIDしか返さないため約定情報をfetchで取得
@@ -129,10 +129,10 @@ class BitflyerAdapter(ExchangeAdapter):
         raw["side"] = side
         return self._parse_order(raw)
 
-    async def place_limit_order(self, side: str, amount_btc: float, price: float) -> OrderResult:
+    async def place_limit_order(self, side: str, amount_btc: float, price: float, pair: str = "BTC/JPY") -> OrderResult:
         amount_btc = round(amount_btc, 8)
         raw = await _run(lambda: self._exchange.create_order(
-            "BTC/JPY", "limit", side, amount_btc, price
+            pair, "limit", side, amount_btc, price
         ))
         if not raw.get("side"):
             raw["side"] = side

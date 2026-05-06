@@ -25,11 +25,11 @@ class ExchangeAdapter(ABC):
         ...
 
     @abstractmethod
-    async def place_market_order(self, side: str, amount_btc: float) -> OrderResult:
+    async def place_market_order(self, side: str, amount_btc: float, pair: str = "BTC/JPY") -> OrderResult:
         ...
 
     @abstractmethod
-    async def place_limit_order(self, side: str, amount_btc: float, price: float) -> OrderResult:
+    async def place_limit_order(self, side: str, amount_btc: float, price: float, pair: str = "BTC/JPY") -> OrderResult:
         ...
 
     @abstractmethod

@@ -82,20 +82,37 @@ class BotMainLoop:
 
         # --- Strategies ---
         risk_cfg = config.risk
-        self._composer = StrategyComposer(
-            strategies=[
+        strategies = [
+            TrendFollowingStrategy(
+                config=config.strategy.trend,
+                aggregator=self._aggregator,
+                max_trade_amount_jpy=risk_cfg.max_trade_amount_jpy,
+                pair="BTC/JPY",
+                strategy_name="trend_btc",
+            ),
+            ArbitrageStrategy(
+                config=config.strategy.arbitrage,
+                aggregator=self._aggregator,
+                portfolio=self._portfolio,
+                max_trade_amount_jpy=risk_cfg.max_trade_amount_jpy,
+            ),
+        ]
+
+        # Bitbankが有効な場合はSOL/JPYトレンド戦略を追加
+        if "bitbank" in self._adapters:
+            strategies.append(
                 TrendFollowingStrategy(
-                    config=config.strategy.trend,
+                    config=config.strategy.sol_trend,
                     aggregator=self._aggregator,
                     max_trade_amount_jpy=risk_cfg.max_trade_amount_jpy,
-                ),
-                ArbitrageStrategy(
-                    config=config.strategy.arbitrage,
-                    aggregator=self._aggregator,
-                    portfolio=self._portfolio,
-                    max_trade_amount_jpy=risk_cfg.max_trade_amount_jpy,
-                ),
-            ],
+                    pair="SOL/JPY",
+                    exchange_filter="bitbank",
+                    strategy_name="trend_sol",
+                )
+            )
+
+        self._composer = StrategyComposer(
+            strategies=strategies,
             config=config.strategy,
         )
 
@@ -152,23 +169,33 @@ class BotMainLoop:
 
     async def _ohlcv_poller(self) -> None:
         trend_cfg = self._config.strategy.trend
+        sol_cfg = self._config.strategy.sol_trend
         data_cfg = self._config.data
         limit = data_cfg.ohlcv_history_candles
-        pair = "BTC/JPY"
+
+        # (exchange, pair, timeframe) のリストを構築
+        poll_targets: list[tuple[str, str, str]] = []
+        for exchange in self._adapters:
+            poll_targets.append((exchange, "BTC/JPY", trend_cfg.timeframe))
+        if "bitbank" in self._adapters:
+            poll_targets.append(("bitbank", "SOL/JPY", sol_cfg.timeframe))
 
         # 起動時にDBから過去のローソク足を復元
-        for exchange in self._adapters:
-            cached = await self._ohlcv_store.load(exchange, pair, trend_cfg.timeframe, limit)
+        for exchange, pair, timeframe in poll_targets:
+            cached = await self._ohlcv_store.load(exchange, pair, timeframe, limit)
             if cached:
                 await self._composer.on_ohlcv_update(exchange, cached)
-                logger.info(f"Restored {len(cached)} cached candles for {exchange}")
+                logger.info(f"Restored {len(cached)} cached candles for {exchange} {pair}")
 
         while self._running:
             if not self._paused:
-                for exchange, adapter in self._adapters.items():
+                for exchange, pair, timeframe in poll_targets:
+                    adapter = self._adapters.get(exchange)
+                    if not adapter:
+                        continue
                     try:
-                        candles = await adapter.fetch_ohlcv(pair, trend_cfg.timeframe, limit)
-                        await self._ohlcv_store.save(exchange, pair, trend_cfg.timeframe, candles)
+                        candles = await adapter.fetch_ohlcv(pair, timeframe, limit)
+                        await self._ohlcv_store.save(exchange, pair, timeframe, candles)
                         signals = await self._composer.on_ohlcv_update(exchange, candles)
                         for signal in signals:
                             ticker = self._aggregator.get_ticker(exchange)
@@ -177,7 +204,7 @@ class BotMainLoop:
                             if isinstance(approved, ApprovedOrder):
                                 await self._router.execute(approved)
                     except Exception as e:
-                        logger.warning(f"OHLCV poll failed for {exchange}: {e}")
+                        logger.warning(f"OHLCV poll failed for {exchange} {pair}: {e}")
             await asyncio.sleep(data_cfg.ohlcv_poll_interval_seconds)
 
     async def _balance_sync_task(self) -> None:
