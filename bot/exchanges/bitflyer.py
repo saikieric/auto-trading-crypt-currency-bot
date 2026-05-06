@@ -114,14 +114,14 @@ class BitflyerAdapter(ExchangeAdapter):
         ))
         order_id = str(raw.get("id", ""))
         # bitFlyerのcreate_orderはIDしか返さないため約定情報をfetchで取得
-        # 成行注文でも約定まで少し時間がかかるため最大3回リトライ
-        for attempt in range(3):
-            await asyncio.sleep(1.0 + attempt)
+        # 成行注文でも約定まで少し時間がかかるため最大5回リトライ
+        for attempt in range(5):
+            await asyncio.sleep(2.0 + attempt)
             try:
                 result = await self.fetch_order_status(order_id)
                 result.side = result.side or side
                 result.pair = result.pair or "BTC/JPY"
-                if result.price > 0:
+                if result.price > 0 and result.amount_btc > 0:
                     return result
             except Exception:
                 pass
