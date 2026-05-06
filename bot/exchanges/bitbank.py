@@ -60,6 +60,20 @@ class BitbankAdapter(ExchangeAdapter):
         raw = await _run(lambda: self._exchange.create_order(
             pair, "market", side, amount_btc
         ))
+        order_id = str(raw.get("id") or "")
+        # 約定情報が揃うまで最大5回リトライ
+        if order_id:
+            for attempt in range(5):
+                await asyncio.sleep(1.5 + attempt)
+                try:
+                    result = await self.fetch_order_status(order_id, pair)
+                    result.side = result.side or side
+                    result.pair = result.pair or pair
+                    if result.price > 0 and result.amount_btc > 0:
+                        return result
+                except Exception:
+                    pass
+        raw["side"] = raw.get("side") or side
         return self._parse_order(raw)
 
     async def place_limit_order(
@@ -109,17 +123,26 @@ class BitbankAdapter(ExchangeAdapter):
     def _parse_order(self, raw: dict) -> OrderResult:
         fee = 0.0
         if raw.get("fee"):
-            fee = raw["fee"].get("cost", 0.0)
+            fee = float(raw["fee"].get("cost") or 0.0)
+
+        side = (raw.get("side") or "buy").lower()
+        pair = raw.get("symbol") or "BTC/JPY"
+        amount_btc = float(raw.get("filled") or raw.get("amount") or 0.0)
+        price = float(raw.get("average") or raw.get("price") or 0.0)
+        status = self._map_status(raw.get("status") or "") or "open"
+        order_id = str(raw.get("id") or "")
+        timestamp = float(raw.get("timestamp") or time.time() * 1000)
+
         return OrderResult(
             exchange=self.name,
-            order_id=str(raw["id"]),
-            side=raw["side"],
-            pair=raw.get("symbol", "BTC/JPY"),
-            amount_btc=raw.get("filled", 0.0) or raw.get("amount", 0.0),
-            price=raw.get("average", 0.0) or raw.get("price", 0.0),
+            order_id=order_id,
+            side=side,
+            pair=pair,
+            amount_btc=amount_btc,
+            price=price,
             fee_jpy=fee,
-            status=self._map_status(raw.get("status", "")),
-            timestamp=raw.get("timestamp") or time.time() * 1000,
+            status=status,
+            timestamp=timestamp,
             raw=raw,
         )
 
