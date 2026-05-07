@@ -38,6 +38,8 @@ class TrendConfig(BaseModel):
     slow_period: int = 21
     signal_confirmation_bars: int = 2
     min_signal_confidence: float = 0.3
+    use_maker_orders: bool = False
+    maker_timeout_seconds: int = 30
 
     @field_validator("slow_period")
     @classmethod

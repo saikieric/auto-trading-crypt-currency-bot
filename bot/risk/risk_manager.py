@@ -24,6 +24,8 @@ class ApprovedOrder:
     amount_jpy: float
     amount_btc: float
     is_arbitrage: bool
+    use_maker: bool = False
+    maker_timeout_seconds: int = 30
 
 
 @dataclass
@@ -146,6 +148,8 @@ class RiskManager:
             amount_jpy=amount_jpy,
             amount_btc=amount_btc,
             is_arbitrage=is_arbitrage,
+            use_maker=signal.use_maker,
+            maker_timeout_seconds=signal.maker_timeout_seconds,
         )
         logger.info(
             f"RISK APPROVED: {signal.strategy} {side} ¥{amount_jpy:,.0f} "

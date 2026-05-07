@@ -114,6 +114,8 @@ class TrendFollowingStrategy(Strategy):
             suggested_amount_jpy=self._max_amount,
             reason=reason,
             confidence=confidence,
+            use_maker=self._config.use_maker_orders,
+            maker_timeout_seconds=self._config.maker_timeout_seconds,
             metadata={
                 "cross": cross,
                 "fast_ema": fast_val,

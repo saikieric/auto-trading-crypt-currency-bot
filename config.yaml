@@ -35,6 +35,8 @@ strategy:
     slow_period: 21
     signal_confirmation_bars: 2
     min_signal_confidence: 0.0
+    use_maker_orders: true
+    maker_timeout_seconds: 30
 
   arbitrage:                # bitFlyer ↔ Bitbank BTC/JPY アービトラージ
     min_spread_pct: 0.30    # bitFlyer 0.15% + Bitbank 0.12% = 0.27% なので0.30%以上

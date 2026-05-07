@@ -80,7 +80,12 @@ class OrderRouter:
                 fee_rate = 0.0015
                 amount_btc = round(available_base * (1 - fee_rate), 8)
 
-            result = await adapter.place_market_order(order.side, amount_btc, pair=pair)
+            if order.use_maker and not order.is_arbitrage:
+                result = await self._place_maker_order(
+                    adapter, order.side, amount_btc, pair, order.maker_timeout_seconds
+                )
+            else:
+                result = await adapter.place_market_order(order.side, amount_btc, pair=pair)
             await self._tracker.register(result, strategy=order.signal.strategy)
             await self._portfolio.update_from_order(result)
 
@@ -167,6 +172,47 @@ class OrderRouter:
                 logger.info(f"Sell leg reversed: bought {reverse.amount_btc:.6f} BTC on {order.sell_exchange}")
             except Exception as e:
                 logger.critical(f"Failed to reverse sell leg: {e}")
+
+    async def _place_maker_order(
+        self,
+        adapter,
+        side: str,
+        amount: float,
+        pair: str,
+        timeout_seconds: int,
+    ) -> "OrderResult":
+        """指値でMaker注文を出し、timeout後に未約定ならキャンセルして成行にフォールバック。"""
+        ticker = await adapter.fetch_ticker(pair)
+        # 板に乗る価格: 買いはbid、売りはask
+        limit_price = ticker.bid if side == "buy" else ticker.ask
+        if limit_price <= 0:
+            logger.warning(f"Invalid limit price {limit_price}, falling back to market")
+            return await adapter.place_market_order(side, amount, pair=pair)
+
+        result = await adapter.place_limit_order(side, amount, limit_price, pair=pair)
+        order_id = result.order_id
+        logger.info(f"Maker limit order placed: {side} {amount} {pair} @ {limit_price:,.2f} (id={order_id})")
+
+        # 約定待ち
+        elapsed = 0
+        poll_interval = 3
+        while elapsed < timeout_seconds:
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+            try:
+                status = await adapter.fetch_order_status(order_id, pair)
+                if status.status == "filled":
+                    logger.info(f"Maker order filled: {order_id}")
+                    return status
+                if status.status == "cancelled":
+                    break
+            except Exception as e:
+                logger.warning(f"Failed to poll maker order {order_id}: {e}")
+
+        # タイムアウト → キャンセルして成行
+        logger.warning(f"Maker order {order_id} not filled after {timeout_seconds}s, cancelling → market")
+        await adapter.cancel_order(order_id, pair)
+        return await adapter.place_market_order(side, amount, pair=pair)
 
     async def _simulate(self, order: ApprovedOrder) -> None:
         """Paper-trade: update portfolio with current market price, no real order."""

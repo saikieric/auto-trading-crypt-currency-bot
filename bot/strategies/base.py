@@ -25,6 +25,8 @@ class TradeSignal:
     reason: str
     confidence: float       # 0.0–1.0
     metadata: Dict = field(default_factory=dict)
+    use_maker: bool = False
+    maker_timeout_seconds: int = 30
 
     @property
     def is_actionable(self) -> bool:
