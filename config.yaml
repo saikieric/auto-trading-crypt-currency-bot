@@ -4,7 +4,7 @@ bot:
 
 exchanges:
   bitflyer:
-    enabled: true
+    enabled: false
     trading_fee_pct: 0.15
   gmo:
     enabled: false
@@ -20,7 +20,7 @@ risk:
   max_open_positions: 3
 
 strategy:
-  active: "both"
+  active: "trend"
 
   trend:                    # bitFlyer BTC/JPY EMAクロス
     timeframe: "15m"
