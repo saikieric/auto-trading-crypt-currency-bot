@@ -44,6 +44,6 @@ class Strategy(ABC):
 
     @abstractmethod
     async def on_ohlcv_update(
-        self, exchange: str, candles: list[OHLCV]
+        self, exchange: str, candles: list[OHLCV], timeframe: str = ""
     ) -> Optional[TradeSignal]:
         ...

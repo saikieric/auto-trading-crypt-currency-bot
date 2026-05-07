@@ -56,10 +56,32 @@ class ArbitrageConfig(BaseModel):
     exchanges: List[str] = Field(default_factory=lambda: ["bitflyer", "gmo", "bitbank"])
 
 
+class SolScalpConfig(BaseModel):
+    timeframe_trend: str = "15m"
+    timeframe_entry: str = "1m"
+    trend_ema_fast: int = 20
+    trend_ema_slow: int = 50
+    entry_ema_period: int = 9
+    max_spread_pct: float = 0.15
+    min_bid_wall_sol: float = 50.0
+    bid_wall_depth_pct: float = 0.3
+    tp_pct: float = 0.25
+    sl_pct: float = 0.5
+    time_stop_minutes: int = 30
+    sol_spike_pct: float = 0.8
+    btc_crash_pct: float = 1.0
+    order_size_jpy: float = 8000.0
+    maker_offset: float = 1.0
+    maker_timeout_seconds: int = 30
+    cooldown_seconds: int = 60
+    max_positions: int = 3
+
+
 class StrategyConfig(BaseModel):
     active: Literal["trend", "arbitrage", "both"] = "both"
     trend: TrendConfig = Field(default_factory=TrendConfig)
     sol_trend: TrendConfig = Field(default_factory=TrendConfig)
+    sol_scalp: SolScalpConfig = Field(default_factory=SolScalpConfig)
     arbitrage: ArbitrageConfig = Field(default_factory=ArbitrageConfig)
 
 

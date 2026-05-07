@@ -4,7 +4,10 @@
       "Bash(pip install *)",
       "Bash(python3 -m pip install -r /c/trading-bot/requirements-dev.txt -q)",
       "PowerShell(Get-Command python -ErrorAction SilentlyContinue)",
-      "PowerShell(Get-Command python3 -ErrorAction SilentlyContinue)"
+      "PowerShell(Get-Command python3 -ErrorAction SilentlyContinue)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }

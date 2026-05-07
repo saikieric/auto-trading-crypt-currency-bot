@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Callable, Awaitable, Optional
 
-from bot.data.market_data import Ticker, OHLCV, OrderBook, OrderResult
+from bot.data.market_data import Ticker, OHLCV, OrderBook, OrderResult  # noqa: F401
 
 
 class ExchangeAdapter(ABC):
@@ -22,6 +22,10 @@ class ExchangeAdapter(ABC):
     @abstractmethod
     async def fetch_balance(self) -> dict[str, float]:
         """Returns {"JPY": float, "BTC": float, ...}"""
+        ...
+
+    @abstractmethod
+    async def fetch_order_book(self, pair: str = "BTC/JPY", limit: int = 20) -> "OrderBook":
         ...
 
     @abstractmethod

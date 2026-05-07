@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -22,6 +23,7 @@ from bot.risk.risk_manager import ApprovedOrder, RiskManager
 from bot.state.portfolio import Portfolio
 from bot.strategies.arbitrage import ArbitrageStrategy
 from bot.strategies.composer import StrategyComposer
+from bot.strategies.sol_scalp import SolScalpStrategy
 from bot.strategies.trend_following import TrendFollowingStrategy
 
 _JST = ZoneInfo("Asia/Tokyo")
@@ -82,34 +84,43 @@ class BotMainLoop:
 
         # --- Strategies ---
         risk_cfg = config.risk
-        strategies = [
-            TrendFollowingStrategy(
-                config=config.strategy.trend,
-                aggregator=self._aggregator,
-                max_trade_amount_jpy=risk_cfg.max_trade_amount_jpy,
-                pair="BTC/JPY",
-                strategy_name="trend_btc",
-            ),
-            ArbitrageStrategy(
-                config=config.strategy.arbitrage,
-                aggregator=self._aggregator,
-                portfolio=self._portfolio,
-                max_trade_amount_jpy=risk_cfg.max_trade_amount_jpy,
-            ),
-        ]
+        strategies = []
 
-        # Bitbankが有効な場合はSOL/JPYトレンド戦略を追加
-        if "bitbank" in self._adapters:
+        # BTC/JPY トレンド（bitFlyer が有効な場合のみ）
+        if "bitflyer" in self._adapters:
             strategies.append(
                 TrendFollowingStrategy(
-                    config=config.strategy.sol_trend,
+                    config=config.strategy.trend,
                     aggregator=self._aggregator,
                     max_trade_amount_jpy=risk_cfg.max_trade_amount_jpy,
-                    pair="SOL/JPY",
-                    exchange_filter="bitbank",
-                    strategy_name="trend_sol",
+                    pair="BTC/JPY",
+                    strategy_name="trend_btc",
                 )
             )
+
+        # アービトラージ（複数取引所が有効な場合）
+        if len(self._adapters) > 1:
+            strategies.append(
+                ArbitrageStrategy(
+                    config=config.strategy.arbitrage,
+                    aggregator=self._aggregator,
+                    portfolio=self._portfolio,
+                    max_trade_amount_jpy=risk_cfg.max_trade_amount_jpy,
+                )
+            )
+
+        # SOL スキャルピング（Bitbank が有効な場合）
+        if "bitbank" in self._adapters:
+            strategies.append(
+                SolScalpStrategy(
+                    config=config.strategy.sol_scalp,
+                    aggregator=self._aggregator,
+                    portfolio=self._portfolio,
+                )
+            )
+
+        if not strategies:
+            raise RuntimeError("No strategies configured")
 
         self._composer = StrategyComposer(
             strategies=strategies,
@@ -117,10 +128,17 @@ class BotMainLoop:
         )
 
         # --- Feed manager ---
+        feed_subscriptions = []
+        for exchange in self._adapters:
+            feed_subscriptions.append((exchange, "BTC/JPY"))
+        if "bitbank" in self._adapters:
+            feed_subscriptions.append(("bitbank", "SOL/JPY"))
+
         self._feed = FeedManager(
             adapters=self._adapters,
             aggregator=self._aggregator,
             on_ticker=self._on_ticker_update,
+            subscriptions=feed_subscriptions,
         )
 
         # --- Discord command bot ---
@@ -157,55 +175,139 @@ class BotMainLoop:
         if self._paused:
             return
         signals = await self._composer.on_ticker_update(tickers)
-        for signal in signals:
-            price = 0.0
-            for t in tickers.values():
-                if t.ask > 0:
-                    price = t.ask
-                    break
-            result = await self._risk.approve(signal, current_btc_price=price)
-            if isinstance(result, ApprovedOrder):
-                await self._router.execute(result)
+        await self._process_signals(signals)
 
     async def _ohlcv_poller(self) -> None:
-        trend_cfg = self._config.strategy.trend
-        sol_cfg = self._config.strategy.sol_trend
+        """15m 足ポーラー（地合い判定用）"""
+        scalp_cfg = self._config.strategy.sol_scalp
         data_cfg = self._config.data
         limit = data_cfg.ohlcv_history_candles
+        timeframe = scalp_cfg.timeframe_trend  # "15m"
 
-        # (exchange, pair, timeframe) のリストを構築
-        poll_targets: list[tuple[str, str, str]] = []
-        for exchange in self._adapters:
-            poll_targets.append((exchange, "BTC/JPY", trend_cfg.timeframe))
+        # (exchange, pair) リスト
+        targets: list[tuple[str, str]] = []
+        if "bitflyer" in self._adapters:
+            targets.append(("bitflyer", "BTC/JPY"))
         if "bitbank" in self._adapters:
-            poll_targets.append(("bitbank", "SOL/JPY", sol_cfg.timeframe))
+            targets.append(("bitbank", "SOL/JPY"))
 
-        # 起動時にDBから過去のローソク足を復元
-        for exchange, pair, timeframe in poll_targets:
+        # 起動時に DB から復元
+        for exchange, pair in targets:
             cached = await self._ohlcv_store.load(exchange, pair, timeframe, limit)
             if cached:
-                await self._composer.on_ohlcv_update(exchange, cached)
-                logger.info(f"Restored {len(cached)} cached candles for {exchange} {pair}")
+                await self._composer.on_ohlcv_update(exchange, cached, timeframe)
+                logger.info(f"Restored {len(cached)} {timeframe} candles for {exchange} {pair}")
 
         while self._running:
             if not self._paused:
-                for exchange, pair, timeframe in poll_targets:
+                for exchange, pair in targets:
                     adapter = self._adapters.get(exchange)
                     if not adapter:
                         continue
                     try:
                         candles = await adapter.fetch_ohlcv(pair, timeframe, limit)
                         await self._ohlcv_store.save(exchange, pair, timeframe, candles)
-                        signals = await self._composer.on_ohlcv_update(exchange, candles)
-                        for signal in signals:
-                            ticker = self._aggregator.get_ticker(exchange)
-                            price = ticker.ask if ticker and ticker.ask > 0 else 0.0
-                            approved = await self._risk.approve(signal, current_btc_price=price)
-                            if isinstance(approved, ApprovedOrder):
-                                await self._router.execute(approved)
+                        signals = await self._composer.on_ohlcv_update(exchange, candles, timeframe)
+                        await self._process_signals(signals)
                     except Exception as e:
-                        logger.warning(f"OHLCV poll failed for {exchange} {pair}: {e}")
+                        logger.warning(f"OHLCV({timeframe}) poll failed for {exchange} {pair}: {e}")
             await asyncio.sleep(data_cfg.ohlcv_poll_interval_seconds)
+
+    async def _ohlcv_1m_poller(self) -> None:
+        """1m 足ポーラー（スキャルエントリー用）"""
+        if "bitbank" not in self._adapters:
+            return
+
+        scalp_cfg = self._config.strategy.sol_scalp
+        timeframe = scalp_cfg.timeframe_entry  # "1m"
+        limit = 50
+        adapter = self._adapters["bitbank"]
+
+        # 起動時に DB から復元
+        cached = await self._ohlcv_store.load("bitbank", "SOL/JPY", timeframe, limit)
+        if cached:
+            await self._composer.on_ohlcv_update("bitbank", cached, timeframe)
+            logger.info(f"Restored {len(cached)} {timeframe} candles for bitbank SOL/JPY")
+
+        while self._running:
+            if not self._paused:
+                try:
+                    candles = await adapter.fetch_ohlcv("SOL/JPY", timeframe, limit)
+                    await self._ohlcv_store.save("bitbank", "SOL/JPY", timeframe, candles)
+                    signals = await self._composer.on_ohlcv_update("bitbank", candles, timeframe)
+                    await self._process_signals(signals)
+                except Exception as e:
+                    logger.warning(f"OHLCV(1m) poll failed for bitbank SOL/JPY: {e}")
+            await asyncio.sleep(30)  # 30秒ごとに1m足を更新
+
+    async def _process_signals(self, signals) -> None:
+        for signal in signals:
+            ticker = self._aggregator.get_ticker(
+                signal.buy_exchange or signal.sell_exchange,
+                signal.pair,
+            )
+            price = ticker.ask if ticker and ticker.ask > 0 else 0.0
+            approved = await self._risk.approve(signal, current_btc_price=price)
+            if isinstance(approved, ApprovedOrder):
+                await self._router.execute(approved)
+
+    async def _sol_position_monitor(self) -> None:
+        """SOL ポジションの TP / SL / タイム SL を監視して自動決済"""
+        if "bitbank" not in self._adapters:
+            return
+
+        adapter = self._adapters["bitbank"]
+        cfg = self._config.strategy.sol_scalp
+
+        while self._running:
+            await asyncio.sleep(5)
+            if self._paused:
+                continue
+
+            sol_positions = [
+                p for p in list(self._portfolio._open_positions)
+                if p.pair == "SOL/JPY" and p.price > 0
+            ]
+            if not sol_positions:
+                continue
+
+            try:
+                ticker = await adapter.fetch_ticker("SOL/JPY")
+            except Exception as e:
+                logger.warning(f"SOL ticker fetch failed in position monitor: {e}")
+                continue
+
+            now_ms = time.time() * 1000
+
+            for pos in sol_positions:
+                pnl_pct = (ticker.bid - pos.price) / pos.price * 100
+                elapsed_min = (now_ms - pos.timestamp) / 1000 / 60
+
+                exit_reason = None
+                if pnl_pct >= cfg.tp_pct:
+                    exit_reason = f"TP +{pnl_pct:.2f}%"
+                elif pnl_pct <= -cfg.sl_pct:
+                    exit_reason = f"SL {pnl_pct:.2f}%"
+                elif elapsed_min >= cfg.time_stop_minutes:
+                    exit_reason = f"TimeSL {elapsed_min:.0f}min ({pnl_pct:+.2f}%)"
+
+                if not exit_reason:
+                    continue
+
+                logger.info(f"[sol_scalp] Exiting position {pos.order_id}: {exit_reason}")
+                try:
+                    sell = await adapter.place_market_order("sell", pos.amount_btc, "SOL/JPY")
+                    await self._tracker.register(sell, strategy="sol_scalp_exit")
+                    await self._portfolio.update_from_order(sell)
+                    self._portfolio.remove_open_position(pos.order_id)
+                    await self._notifier.send(
+                        f"🔔 **SOL EXIT** {exit_reason}\n"
+                        f"売り: `{sell.amount_btc:.4f} SOL @ ¥{sell.price:,.2f}`\n"
+                        f"エントリー: `¥{pos.price:,.2f}` → `¥{sell.price:,.2f}`"
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to exit SOL position {pos.order_id}: {e}")
+                    await self._notifier.send_error(e, f"SOL exit failed: {pos.order_id}")
 
     async def _balance_sync_task(self) -> None:
         while self._running:
@@ -285,6 +387,8 @@ class BotMainLoop:
         tasks = [
             asyncio.create_task(self._feed.run(), name="feed_manager"),
             asyncio.create_task(self._ohlcv_poller(), name="ohlcv_poller"),
+            asyncio.create_task(self._ohlcv_1m_poller(), name="ohlcv_1m_poller"),
+            asyncio.create_task(self._sol_position_monitor(), name="sol_position_monitor"),
             asyncio.create_task(self._balance_sync_task(), name="balance_sync"),
             asyncio.create_task(self._daily_reset_task(), name="daily_reset"),
             asyncio.create_task(self._heartbeat_task(), name="heartbeat"),

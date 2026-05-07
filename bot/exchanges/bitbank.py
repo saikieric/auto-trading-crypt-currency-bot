@@ -46,6 +46,17 @@ class BitbankAdapter(ExchangeAdapter):
             for r in raw_list
         ]
 
+    async def fetch_order_book(self, pair: str = "BTC/JPY", limit: int = 20) -> "OrderBook":
+        from bot.data.market_data import OrderBook
+        raw = await _run(lambda: self._exchange.fetch_order_book(pair, limit))
+        return OrderBook(
+            exchange=self.name,
+            pair=pair,
+            bids=[(b[0], b[1]) for b in raw.get("bids", [])],
+            asks=[(a[0], a[1]) for a in raw.get("asks", [])],
+            timestamp=raw.get("timestamp") or time.time() * 1000,
+        )
+
     async def fetch_balance(self) -> dict[str, float]:
         raw = await _run(lambda: self._exchange.fetch_balance())
         return {

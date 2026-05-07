@@ -36,9 +36,8 @@ class TrendFollowingStrategy(Strategy):
         return None  # trend strategy uses OHLCV, not real-time ticks
 
     async def on_ohlcv_update(
-        self, exchange: str, candles: list[OHLCV]
+        self, exchange: str, candles: list[OHLCV], timeframe: str = ""
     ) -> Optional[TradeSignal]:
-        # このストラテジーが対象とする取引所のみ処理
         if self._exchange_filter and exchange != self._exchange_filter:
             return None
         for c in candles:

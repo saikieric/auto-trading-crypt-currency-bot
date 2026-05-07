@@ -29,11 +29,11 @@ class StrategyComposer:
         return signals
 
     async def on_ohlcv_update(
-        self, exchange: str, candles: List[OHLCV]
+        self, exchange: str, candles: List[OHLCV], timeframe: str = ""
     ) -> List[TradeSignal]:
         signals: List[TradeSignal] = []
         for strategy in self._active_strategies():
-            signal = await strategy.on_ohlcv_update(exchange, candles)
+            signal = await strategy.on_ohlcv_update(exchange, candles, timeframe)
             if signal and signal.is_actionable:
                 signals.append(signal)
         return signals

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Dict, Callable, Awaitable, List
+from typing import Dict, Callable, Awaitable, List, Tuple
 
 from loguru import logger
 
@@ -16,18 +16,24 @@ class FeedManager:
         adapters: Dict[str, ExchangeAdapter],
         aggregator: ExchangeAggregator,
         on_ticker: Callable[[Dict[str, Ticker]], Awaitable[None]],
+        subscriptions: List[Tuple[str, str]] = None,
     ) -> None:
         self._adapters = adapters
         self._aggregator = aggregator
         self._on_ticker = on_ticker
+        # list of (exchange, pair) to subscribe to
+        # default: each exchange → BTC/JPY
+        if subscriptions is not None:
+            self._subscriptions = subscriptions
+        else:
+            self._subscriptions = [(ex, "BTC/JPY") for ex in adapters]
 
-    async def _watch_exchange(self, exchange: str, adapter: ExchangeAdapter) -> None:
-        pair = "BTC/JPY"
+    async def _watch(self, exchange: str, pair: str, adapter: ExchangeAdapter) -> None:
         while True:
             try:
                 await adapter.subscribe_ticker(pair, self._handle_ticker)
             except Exception as e:
-                logger.warning(f"WebSocket disconnected from {exchange}: {e}. Reconnecting in 5s...")
+                logger.warning(f"Feed disconnected {exchange}/{pair}: {e}. Reconnecting in 5s...")
                 await asyncio.sleep(5)
 
     async def _handle_ticker(self, ticker: Ticker) -> None:
@@ -37,10 +43,13 @@ class FeedManager:
 
     async def run(self) -> None:
         tasks: List[asyncio.Task] = []
-        for exchange, adapter in self._adapters.items():
+        for exchange, pair in self._subscriptions:
+            adapter = self._adapters.get(exchange)
+            if not adapter:
+                continue
             task = asyncio.create_task(
-                self._watch_exchange(exchange, adapter),
-                name=f"feed_{exchange}",
+                self._watch(exchange, pair, adapter),
+                name=f"feed_{exchange}_{pair.replace('/', '_')}",
             )
             tasks.append(task)
         await asyncio.gather(*tasks)

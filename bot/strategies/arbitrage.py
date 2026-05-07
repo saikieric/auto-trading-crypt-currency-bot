@@ -27,7 +27,7 @@ class ArbitrageStrategy(Strategy):
         self._last_trade_ts: float = 0.0
 
     async def on_ohlcv_update(
-        self, exchange: str, candles: list[OHLCV]
+        self, exchange: str, candles: list[OHLCV], timeframe: str = ""
     ) -> Optional[TradeSignal]:
         return None  # arbitrage uses real-time tickers, not candles
 

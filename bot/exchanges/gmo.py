@@ -117,6 +117,11 @@ class GmoAdapter(ExchangeAdapter):
             for c in candles
         ]
 
+    async def fetch_order_book(self, pair: str = "BTC/JPY", limit: int = 20):
+        from bot.data.market_data import OrderBook
+        import time as _time
+        return OrderBook(exchange=self.name, pair=pair, bids=[], asks=[], timestamp=_time.time() * 1000)
+
     async def fetch_balance(self) -> dict[str, float]:
         data = await self._get_private("/v1/account/assets")
         result = {"JPY": 0.0, "BTC": 0.0}

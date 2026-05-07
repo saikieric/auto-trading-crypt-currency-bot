@@ -20,26 +20,37 @@ risk:
   max_open_positions: 3
 
 strategy:
-  active: "trend"
+  active: "both"
 
-  trend:                    # bitFlyer BTC/JPY EMAクロス
+  trend:                    # BTC/JPY EMAクロス（bitFlyer有効時のみ使用）
     timeframe: "15m"
     fast_period: 9
     slow_period: 21
     signal_confirmation_bars: 2
     min_signal_confidence: 0.0
 
-  sol_trend:                # Bitbank SOL/JPY EMAクロス
-    timeframe: "15m"
-    fast_period: 9
-    slow_period: 21
-    signal_confirmation_bars: 2
-    min_signal_confidence: 0.0
-    use_maker_orders: true
+  sol_scalp:                # Bitbank SOL/JPY 2タイムフレームスキャルピング
+    timeframe_trend: "15m"  # 地合い判定
+    timeframe_entry: "1m"   # エントリー
+    trend_ema_fast: 20
+    trend_ema_slow: 50
+    entry_ema_period: 9     # 1m押し目の基準EMA
+    max_spread_pct: 0.15    # スプレッド上限(%)
+    min_bid_wall_sol: 50.0  # 板の厚さ下限(SOL)
+    bid_wall_depth_pct: 0.3 # 板チェック範囲(%)
+    tp_pct: 0.25            # 利確(%)
+    sl_pct: 0.5             # 損切り(%)
+    time_stop_minutes: 30   # 時間切れ撤退
+    sol_spike_pct: 0.8      # 急騰/急落検知(%)
+    btc_crash_pct: 1.0      # BTC急落サーキットブレーカー(%)
+    order_size_jpy: 8000
+    maker_offset: 1.0       # Best Bid - N 円で指値
     maker_timeout_seconds: 30
+    cooldown_seconds: 60
+    max_positions: 3
 
-  arbitrage:                # bitFlyer ↔ Bitbank BTC/JPY アービトラージ
-    min_spread_pct: 0.30    # bitFlyer 0.15% + Bitbank 0.12% = 0.27% なので0.30%以上
+  arbitrage:                # 複数取引所アービトラージ（現在は無効）
+    min_spread_pct: 0.30
     cooldown_seconds: 120
     exchanges:
       - "bitflyer"
