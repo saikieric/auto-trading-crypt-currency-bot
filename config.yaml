@@ -38,12 +38,12 @@ strategy:
     max_spread_pct: 0.15    # スプレッド上限(%)
     min_bid_wall_sol: 50.0  # 板の厚さ下限(SOL)
     bid_wall_depth_pct: 0.3 # 板チェック範囲(%)
-    tp_pct: 0.25            # 利確(%)
-    sl_pct: 0.5             # 損切り(%)
+    tp_pct: 0.50            # 利確(%) 実質+0.40% (手数料0.10%考慮)
+    sl_pct: 0.8             # 損切り(%)
     time_stop_minutes: 30   # 時間切れ撤退
     sol_spike_pct: 0.8      # 急騰/急落検知(%)
     btc_crash_pct: 1.0      # BTC急落サーキットブレーカー(%)
-    order_size_jpy: 8000
+    order_size_jpy: 50000
     maker_offset: 1.0       # Best Bid - N 円で指値
     maker_timeout_seconds: 30
     cooldown_seconds: 60
