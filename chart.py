@@ -80,11 +80,10 @@ def _draw(candles, pair: str, timeframe: str, cfg):
     plt.plotsize(w, max(h, 20))
     plt.ylim(y_min, y_max)
 
-    # 終値ライン
-    plt.plot(xs, closes, color="white", label=f"Close {last_close:,.2f}", marker="braille")
-    # EMA ライン
-    plt.plot(xs, ema20f, color="cyan",   label=f"EMA{cfg.trend_ema_fast}  {last_ema20:,.2f}", marker="braille")
-    plt.plot(xs, ema50f, color="orange", label=f"EMA{cfg.trend_ema_slow}  {last_ema50:,.2f}", marker="braille")
+    # 終値ライン（凡例なし — plotext のバグ回避）
+    plt.plot(xs, closes, color="white",  marker="braille")
+    plt.plot(xs, ema20f, color="cyan",   marker="braille")
+    plt.plot(xs, ema50f, color="orange", marker="braille")
 
     # X軸ラベルを間引いて表示
     step = max(1, len(xs) // 8)
@@ -93,7 +92,12 @@ def _draw(candles, pair: str, timeframe: str, cfg):
     plt.xticks(tick_xs, tick_labels)
 
     updated = time.strftime("%H:%M:%S")
-    plt.title(f"{pair}  [{timeframe}]   トレンド: {trend}   更新: {updated}")
+    plt.title(
+        f"{pair} [{timeframe}]  Close:{last_close:,.2f}  "
+        f"EMA{cfg.trend_ema_fast}:{last_ema20:,.2f}(cyan)  "
+        f"EMA{cfg.trend_ema_slow}:{last_ema50:,.2f}(orange)  "
+        f"{trend}  {updated}"
+    )
     plt.xlabel("時刻 (JST)")
     plt.ylabel("価格 (JPY)")
 
