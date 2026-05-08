@@ -80,11 +80,8 @@ def _draw(candles, pair: str, timeframe: str, cfg):
     plt.plotsize(w, max(h, 20))
     plt.ylim(y_min, y_max)
 
-    # 高値・安値を細い線で表現
-    plt.plot(xs, highs,  color="white",  label=f"High",  marker="dot")
-    plt.plot(xs, lows,   color="white",  label=f"Low",   marker="dot")
     # 終値ライン
-    plt.plot(xs, closes, color="white",  label=f"Close {last_close:,.2f}", marker="braille")
+    plt.plot(xs, closes, color="white", label=f"Close {last_close:,.2f}", marker="braille")
     # EMA ライン
     plt.plot(xs, ema20f, color="cyan",   label=f"EMA{cfg.trend_ema_fast}  {last_ema20:,.2f}", marker="braille")
     plt.plot(xs, ema50f, color="orange", label=f"EMA{cfg.trend_ema_slow}  {last_ema50:,.2f}", marker="braille")
