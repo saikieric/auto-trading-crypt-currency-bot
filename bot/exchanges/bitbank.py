@@ -68,6 +68,9 @@ class BitbankAdapter(ExchangeAdapter):
     async def place_market_order(
         self, side: str, amount_btc: float, pair: str = "BTC/JPY"
     ) -> OrderResult:
+        # bitbank SOL最小単位: 0.0001、BTC: 0.00000001
+        precision = 4 if pair.startswith("SOL") else 8
+        amount_btc = round(amount_btc, precision)
         raw = await _run(lambda: self._exchange.create_order(
             pair, "market", side, amount_btc
         ))

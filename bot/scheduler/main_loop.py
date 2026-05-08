@@ -242,14 +242,17 @@ class BotMainLoop:
 
     async def _process_signals(self, signals) -> None:
         for signal in signals:
-            ticker = self._aggregator.get_ticker(
-                signal.buy_exchange or signal.sell_exchange,
-                signal.pair,
-            )
-            price = ticker.ask if ticker and ticker.ask > 0 else 0.0
-            approved = await self._risk.approve(signal, current_btc_price=price)
-            if isinstance(approved, ApprovedOrder):
-                await self._router.execute(approved)
+            try:
+                ticker = self._aggregator.get_ticker(
+                    signal.buy_exchange or signal.sell_exchange,
+                    signal.pair,
+                )
+                price = ticker.ask if ticker and ticker.ask > 0 else 0.0
+                approved = await self._risk.approve(signal, current_btc_price=price)
+                if isinstance(approved, ApprovedOrder):
+                    await self._router.execute(approved)
+            except Exception as e:
+                logger.exception(f"Signal processing failed ({signal.strategy}): {e}")
 
     async def _sol_position_monitor(self) -> None:
         """SOL ポジションの TP / SL / タイム SL を監視して自動決済"""
