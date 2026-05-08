@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 SOL/JPY チャート表示ツール
-使い方: python chart.py [--timeframe 15m] [--limit 50] [--live]
+使い方: .venv/bin/python chart.py [--timeframe 15m] [--limit 50] [--live]
 """
 from __future__ import annotations
 
@@ -10,11 +10,11 @@ import asyncio
 import os
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import plotext as plt
 
-# プロジェクトルートを sys.path に追加
 sys.path.insert(0, str(Path(__file__).parent))
 
 from bot.config.loader import load_config
@@ -24,11 +24,11 @@ from bot.indicators.moving_averages import ema_series
 
 def _parse_args():
     p = argparse.ArgumentParser(description="SOL/JPY チャートをターミナルに表示")
-    p.add_argument("--timeframe", default="15m", help="足種 (1m / 15m / 1h など)")
-    p.add_argument("--pair", default="SOL/JPY", help="通貨ペア")
-    p.add_argument("--limit", type=int, default=60, help="表示本数")
+    p.add_argument("--timeframe", default="15m")
+    p.add_argument("--pair", default="SOL/JPY")
+    p.add_argument("--limit", type=int, default=50)
     p.add_argument("--live", action="store_true", help="自動更新モード（Ctrl+C で終了）")
-    p.add_argument("--interval", type=int, default=30, help="自動更新間隔（秒）")
+    p.add_argument("--interval", type=int, default=30)
     return p.parse_args()
 
 
@@ -36,54 +36,69 @@ def _draw(candles, pair: str, timeframe: str, cfg):
     closes = [c.close for c in candles]
     highs  = [c.high  for c in candles]
     lows   = [c.low   for c in candles]
-    times  = [c.timestamp / 1000 for c in candles]  # Unix秒
 
-    ema20 = ema_series(closes, cfg.trend_ema_fast)   # 20
-    ema50 = ema_series(closes, cfg.trend_ema_slow)   # 50
+    ema20_s = ema_series(closes, cfg.trend_ema_fast)
+    ema50_s = ema_series(closes, cfg.trend_ema_slow)
 
-    # None を直前の値で埋める（プロット用）
-    def fill_none(series):
-        out = []
-        last = None
+    # None を直前値で補完
+    def fill(series):
+        out, last = [], None
         for v in series:
             if v is not None:
                 last = v
-            out.append(last)
+            out.append(last if last is not None else 0.0)
         return out
 
-    ema20f = fill_none(ema20)
-    ema50f = fill_none(ema50)
+    ema20f = fill(ema20_s)
+    ema50f = fill(ema50_s)
+
+    # X軸ラベル（時刻文字列）
+    labels = [
+        datetime.fromtimestamp(c.timestamp / 1000).strftime("%H:%M")
+        for c in candles
+    ]
+    xs = list(range(len(candles)))
+
+    # Y軸レンジをローソク足の高低に合わせる
+    y_min = min(lows)   * 0.9995
+    y_max = max(highs)  * 1.0005
 
     # 最新値
-    last_close  = closes[-1]  if closes  else 0
-    last_ema20  = next((v for v in reversed(ema20) if v is not None), 0)
-    last_ema50  = next((v for v in reversed(ema50) if v is not None), 0)
-    trend = "↑ 上昇" if last_ema20 > last_ema50 else "↓ 下落"
-    trend_color = "green" if last_ema20 > last_ema50 else "red"
+    last_close = closes[-1]
+    last_ema20 = next((v for v in reversed(ema20_s) if v is not None), 0.0)
+    last_ema50 = next((v for v in reversed(ema50_s) if v is not None), 0.0)
+    trend      = "↑ 上昇" if last_ema20 > last_ema50 else "↓ 下落"
+
+    try:
+        w = os.get_terminal_size().columns
+        h = os.get_terminal_size().lines - 5
+    except OSError:
+        w, h = 120, 30
 
     plt.clf()
     plt.theme("dark")
+    plt.plotsize(w, max(h, 20))
+    plt.ylim(y_min, y_max)
 
-    term_w = os.get_terminal_size().columns
-    term_h = os.get_terminal_size().lines - 6
-    plt.plotsize(term_w, max(term_h, 20))
-
-    # ローソク足（高値・安値）をバーで表現
-    plt.bar(times, highs,  color="white",  label="High", width=0.4)
-    plt.bar(times, lows,   color=234,      label="Low",  width=0.4)  # 暗い灰色で上書き
-
+    # 高値・安値を細い線で表現
+    plt.plot(xs, highs,  color="white",  label=f"High",  marker="dot")
+    plt.plot(xs, lows,   color="white",  label=f"Low",   marker="dot")
     # 終値ライン
-    plt.plot(times, closes, color="white",  label=f"Close  {last_close:,.2f}", marker="braille")
-
+    plt.plot(xs, closes, color="white",  label=f"Close {last_close:,.2f}", marker="braille")
     # EMA ライン
-    plt.plot(times, ema20f, color="cyan",   label=f"EMA{cfg.trend_ema_fast}  {last_ema20:,.2f}", marker="braille")
-    plt.plot(times, ema50f, color="orange", label=f"EMA{cfg.trend_ema_slow}  {last_ema50:,.2f}", marker="braille")
+    plt.plot(xs, ema20f, color="cyan",   label=f"EMA{cfg.trend_ema_fast}  {last_ema20:,.2f}", marker="braille")
+    plt.plot(xs, ema50f, color="orange", label=f"EMA{cfg.trend_ema_slow}  {last_ema50:,.2f}", marker="braille")
+
+    # X軸ラベルを間引いて表示
+    step = max(1, len(xs) // 8)
+    tick_xs     = xs[::step]
+    tick_labels = labels[::step]
+    plt.xticks(tick_xs, tick_labels)
 
     updated = time.strftime("%H:%M:%S")
     plt.title(f"{pair}  [{timeframe}]   トレンド: {trend}   更新: {updated}")
-    plt.xlabel("時刻")
+    plt.xlabel("時刻 (JST)")
     plt.ylabel("価格 (JPY)")
-    plt.date_form("H:M", "d/m H:M")
 
     plt.show()
 
@@ -109,7 +124,8 @@ async def main():
     scalp_cfg = config.strategy.sol_scalp
 
     if args.live:
-        print(f"ライブモード開始（{args.interval}秒ごとに更新）  Ctrl+C で終了")
+        print(f"ライブモード（{args.interval}秒ごとに更新）  Ctrl+C で終了")
+        await asyncio.sleep(1)
         while True:
             try:
                 await _fetch_and_draw(adapter, args, scalp_cfg)
@@ -122,4 +138,7 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n終了します。")
