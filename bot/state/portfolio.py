@@ -11,12 +11,16 @@ from bot.data.market_data import OrderResult
 class ExchangeBalance:
     jpy: float = 0.0
     btc: float = 0.0
+    sol: float = 0.0
 
     def available_jpy(self) -> float:
         return max(0.0, self.jpy)
 
     def available_btc(self) -> float:
         return max(0.0, self.btc)
+
+    def available_sol(self) -> float:
+        return max(0.0, self.sol)
 
 
 class Portfolio:
@@ -30,8 +34,8 @@ class Portfolio:
 
     # --- Balance management ---
 
-    def set_balance(self, exchange: str, jpy: float, btc: float) -> None:
-        self._balances[exchange] = ExchangeBalance(jpy=jpy, btc=btc)
+    def set_balance(self, exchange: str, jpy: float, btc: float, sol: float = 0.0) -> None:
+        self._balances[exchange] = ExchangeBalance(jpy=jpy, btc=btc, sol=sol)
 
     def get_available_jpy(self, exchange: str) -> float:
         return self._balances.get(exchange, ExchangeBalance()).available_jpy()
@@ -44,6 +48,9 @@ class Portfolio:
 
     def get_total_btc(self) -> float:
         return sum(b.btc for b in self._balances.values())
+
+    def get_total_sol(self) -> float:
+        return sum(b.sol for b in self._balances.values())
 
     # --- P&L ---
 
@@ -73,16 +80,24 @@ class Portfolio:
 
             bal = self._balances[exchange]
 
+            base = order.pair.split("/")[0] if "/" in order.pair else "BTC"
+
             if order.side == "buy":
                 cost_jpy = order.total_jpy + order.fee_jpy
                 bal.jpy -= cost_jpy
-                bal.btc += order.amount_btc
+                if base == "SOL":
+                    bal.sol += order.amount_btc
+                else:
+                    bal.btc += order.amount_btc
                 self._todays_realized_pnl -= order.fee_jpy
                 self._total_realized_pnl -= order.fee_jpy
             elif order.side == "sell":
                 proceeds_jpy = order.total_jpy - order.fee_jpy
                 bal.jpy += proceeds_jpy
-                bal.btc -= order.amount_btc
+                if base == "SOL":
+                    bal.sol -= order.amount_btc
+                else:
+                    bal.btc -= order.amount_btc
                 self._todays_realized_pnl -= order.fee_jpy
                 self._total_realized_pnl -= order.fee_jpy
 
@@ -104,11 +119,12 @@ class Portfolio:
     def summary(self) -> dict:
         return {
             "balances": {
-                name: {"jpy": b.jpy, "btc": b.btc}
+                name: {"jpy": b.jpy, "btc": b.btc, "sol": b.sol}
                 for name, b in self._balances.items()
             },
             "total_jpy": self.get_total_jpy(),
             "total_btc": self.get_total_btc(),
+            "total_sol": self.get_total_sol(),
             "todays_pnl": self._todays_realized_pnl,
             "total_pnl": self._total_realized_pnl,
             "open_positions": len(self._open_positions),

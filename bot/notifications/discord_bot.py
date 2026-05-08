@@ -250,7 +250,9 @@ class DiscordCommandBot:
             "---",
         ]
         for ex, bal in portfolio["balances"].items():
-            lines.append(f"{ex}: {bal['jpy']:,.0f} JPY  {bal['btc']:.6f} BTC")
+            sol = bal.get("sol", 0.0)
+            sol_str = f"  {sol:.4f} SOL" if sol > 0 else ""
+            lines.append(f"{ex}: {bal['jpy']:,.0f} JPY  {bal['btc']:.6f} BTC{sol_str}")
         lines.append("```")
         return "\n".join(lines)
 

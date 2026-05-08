@@ -79,14 +79,15 @@ class DiscordNotifier(Notifier):
 
         dry = "[DRY RUN] " if self._dry_run else ""
         side_emoji = "🟢" if order.side == "buy" else "🔴"
+        base = order.pair.split("/")[0] if "/" in order.pair else "BTC"
         msg = (
             f"**{dry}取引実行** {side_emoji}\n"
             f"```\n"
             f"戦略  : {signal.strategy}\n"
             f"種別  : {order.side.upper()}\n"
             f"取引所: {order.exchange}\n"
-            f"数量  : {order.amount_btc:.6f} BTC\n"
-            f"価格  : ¥{order.price:,.0f}\n"
+            f"数量  : {order.amount_btc:.6f} {base}\n"
+            f"価格  : ¥{order.price:,.2f}\n"
             f"金額  : ¥{order.total_jpy:,.0f}\n"
             f"```\n"
             f"_{signal.reason}_"
@@ -105,13 +106,16 @@ class DiscordNotifier(Notifier):
         sign = "+" if pnl >= 0 else ""
         pnl_emoji = "📈" if pnl >= 0 else "📉"
 
+        sol = portfolio.get("total_sol", 0.0)
+        btc = portfolio.get("total_btc", 0.0)
         msg = (
             f"**日次サマリー** {pnl_emoji}\n"
             f"```\n"
             f"本日損益: {sign}¥{pnl:,.0f}\n"
             f"損失使用: ¥{loss_used:,.0f} / ¥{loss_limit:,.0f}\n"
             f"JPY合計 : ¥{portfolio.get('total_jpy', 0):,.0f}\n"
-            f"BTC合計 : {portfolio.get('total_btc', 0):.6f} BTC\n"
+            f"BTC合計 : {btc:.6f} BTC\n"
+            f"SOL合計 : {sol:.4f} SOL\n"
             f"```"
         )
         level = "success" if pnl >= 0 else "warning"

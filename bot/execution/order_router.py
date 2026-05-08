@@ -63,6 +63,7 @@ class OrderRouter:
                         exchange,
                         jpy=balances.get("JPY", 0.0),
                         btc=balances.get("BTC", 0.0),
+                        sol=balances.get("SOL", 0.0),
                     )
                 except Exception as e:
                     logger.warning(f"Failed to refresh balance before sell: {e}")

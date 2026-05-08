@@ -319,6 +319,7 @@ class BotMainLoop:
                         exchange,
                         jpy=balances.get("JPY", 0.0),
                         btc=balances.get("BTC", 0.0),
+                        sol=balances.get("SOL", 0.0),
                     )
                     logger.debug(f"Balance sync {exchange}: {balances}")
                 except Exception as e:
@@ -340,10 +341,13 @@ class BotMainLoop:
         while self._running:
             await asyncio.sleep(interval)
             portfolio = self._portfolio.summary()
+            sol = portfolio.get("total_sol", 0.0)
+            btc = portfolio.get("total_btc", 0.0)
             msg = (
                 f"*Heartbeat* Bot稼働中\n"
                 f"JPY合計: `¥{portfolio['total_jpy']:,.0f}`\n"
-                f"BTC合計: `{portfolio['total_btc']:.6f}`\n"
+                f"BTC合計: `{btc:.6f} BTC`\n"
+                f"SOL合計: `{sol:.4f} SOL`\n"
                 f"本日損益: `¥{portfolio['todays_pnl']:,.0f}`"
             )
             await self._notifier.send(msg)
@@ -361,7 +365,8 @@ class BotMainLoop:
                 balances = await adapter.fetch_balance()
                 jpy = balances.get("JPY", 0.0)
                 btc = balances.get("BTC", 0.0)
-                self._portfolio.set_balance(exchange, jpy=jpy, btc=btc)
+                sol = balances.get("SOL", 0.0)
+                self._portfolio.set_balance(exchange, jpy=jpy, btc=btc, sol=sol)
                 logger.info(f"Initial balance {exchange}: {balances}")
 
                 # BTC保有量からオープンポジションを復元（再起動後も制限が効くように）
