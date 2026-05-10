@@ -93,6 +93,8 @@ class BitbankAdapter(ExchangeAdapter):
     async def place_limit_order(
         self, side: str, amount_btc: float, price: float, pair: str = "BTC/JPY"
     ) -> OrderResult:
+        precision = 4 if pair.startswith("SOL") else 8
+        amount_btc = round(amount_btc, precision)
         raw = await _run(lambda: self._exchange.create_order(
             pair, "limit", side, amount_btc, price
         ))

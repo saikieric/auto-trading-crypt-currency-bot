@@ -15,7 +15,7 @@ exchanges:
 
 risk:
   starting_capital_jpy: 100000
-  max_trade_amount_jpy: 30000
+  max_trade_amount_jpy: 45000
   max_daily_loss_jpy: 5000
   max_open_positions: 3
 
