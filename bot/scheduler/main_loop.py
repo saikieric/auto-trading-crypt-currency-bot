@@ -269,7 +269,7 @@ class BotMainLoop:
 
             sol_positions = [
                 p for p in list(self._portfolio._open_positions)
-                if p.pair == "SOL/JPY" and p.price > 0
+                if p.pair == "SOL/JPY"
             ]
             if not sol_positions:
                 continue
@@ -283,6 +283,22 @@ class BotMainLoop:
             now_ms = time.time() * 1000
 
             for pos in sol_positions:
+                if pos.price <= 0:
+                    logger.warning(f"[sol_scalp] Position {pos.order_id} has price=0, skipping TP/SL but applying TimeSL")
+                    elapsed_min = (now_ms - pos.timestamp) / 1000 / 60
+                    if elapsed_min >= cfg.time_stop_minutes and pos.timestamp > 0:
+                        try:
+                            sell = await adapter.place_market_order("sell", pos.amount_btc, "SOL/JPY")
+                            await self._tracker.register(sell, strategy="sol_scalp_exit")
+                            await self._portfolio.update_from_order(sell)
+                            self._portfolio.remove_open_position(pos.order_id)
+                            await self._notifier.send(
+                                f"🔔 **SOL EXIT** TimeSL (price=0 position) {elapsed_min:.0f}min\n"
+                                f"売り: `{sell.amount_btc:.4f} SOL @ ¥{sell.price:,.2f}`"
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to exit zero-price SOL position {pos.order_id}: {e}")
+                    continue
                 pnl_pct = (ticker.bid - pos.price) / pos.price * 100
                 elapsed_min = (now_ms - pos.timestamp) / 1000 / 60
 

@@ -78,8 +78,11 @@ class OrderRouter:
                     )
                     return
                 # 手数料分（概ね0.12〜0.15%）をベース通貨で差し引いてから売る
-                fee_rate = 0.0015
-                amount_btc = round(available_base * (1 - fee_rate), 8)
+                import math
+                precision = 4 if base_currency == "SOL" else 8
+                factor = 10 ** precision
+                # Floor to avoid selling more than available (fee is deducted from JPY proceeds)
+                amount_btc = math.floor(available_base * factor) / factor
 
             if order.use_maker and not order.is_arbitrage:
                 result = await self._place_maker_order(
@@ -90,7 +93,9 @@ class OrderRouter:
             await self._tracker.register(result, strategy=order.signal.strategy)
             await self._portfolio.update_from_order(result)
 
-            if order.side == "buy" and result.status == "filled":
+            if order.side == "buy" and result.status in ("filled", "open"):
+                # Maker limit orders may return "open" status briefly; track position regardless
+                # so the position monitor can apply TP/SL. Use filled price if available.
                 self._portfolio.add_open_position(result)
             elif order.side == "sell":
                 # 同じ取引所・ペアの買いポジションをクリア
@@ -203,7 +208,12 @@ class OrderRouter:
             try:
                 status = await adapter.fetch_order_status(order_id, pair)
                 if status.status == "filled":
-                    logger.info(f"Maker order filled: {order_id}")
+                    logger.info(f"Maker order filled: {order_id} @ ¥{status.price:,.2f}")
+                    # Ensure side/pair are populated from original order if missing
+                    if not status.side:
+                        status.side = side
+                    if not status.pair or status.pair == "BTC/JPY":
+                        status.pair = pair
                     return status
                 if status.status == "cancelled":
                     break
