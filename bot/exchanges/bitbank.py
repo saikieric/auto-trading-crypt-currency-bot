@@ -71,6 +71,7 @@ class BitbankAdapter(ExchangeAdapter):
         # bitbank SOL最小単位: 0.0001、BTC: 0.00000001
         precision = 4 if pair.startswith("SOL") else 8
         amount_btc = round(amount_btc, precision)
+        logger.info(f"[bitbank] place_market_order: {side} {amount_btc} {pair}")
         raw = await _run(lambda: self._exchange.create_order(
             pair, "market", side, amount_btc
         ))
@@ -95,6 +96,7 @@ class BitbankAdapter(ExchangeAdapter):
     ) -> OrderResult:
         precision = 4 if pair.startswith("SOL") else 8
         amount_btc = round(amount_btc, precision)
+        logger.info(f"[bitbank] place_limit_order: {side} {amount_btc} {pair} @ {price}")
         raw = await _run(lambda: self._exchange.create_order(
             pair, "limit", side, amount_btc, price
         ))
